@@ -207,6 +207,26 @@ h6 {
   }
 }
 
+.Banner {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  line-height: 20px;
+  font-family: 'Archia';
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: $purple;
+  background: $purple-light;
+  .snippet {
+    align-self: center;
+    width: calc(100%-10rem);
+    word-wrap: break-word;
+    padding: 1.5rem;
+    text-align: center;
+  }
+}
+
+
 .Navbar {
   display: flex;
   flex-direction: row;
@@ -228,6 +248,9 @@ h6 {
       color: $gray-mid;
       span {
         display: inline-block;
+        &:hover {
+          color: $gray;
+        }
       }
     }
   }
@@ -250,19 +273,24 @@ h6 {
   width: 30rem;
   align-self: center;
   justify-content: space-between;
-  padding-top: 2.5rem;
+  padding-top: 2rem;
   margin-bottom: 1rem;
   h1, h6 {
     margin: 0;
   }
   h1 {
     color: $gray-dark;
-    margin-bottom: 1rem;
   }
   .header-mid {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
+    .titles {
+      h6 {
+        margin-top: 0.25rem;
+        color: $gray;
+      }
+    }
     & > * {
       align-self: center;
     }
@@ -467,6 +495,10 @@ table {
       padding: 0.25rem;
       font-size: 0.9rem;
       border-radius: 5px;
+      text-align: right;
+    }
+    td:first-child {
+      text-align: left;
     }
   }
   .affected-count {
@@ -475,6 +507,11 @@ table {
     top: -1rem;
     color: $gray-mid;
     right: 0;
+  }
+  .is-total {
+    td {
+      background: $gray-hover;
+    }
   }
 }
 
@@ -498,18 +535,25 @@ table {
   }
   .svg-parent {
     display: flex;
-    flex: 0.9;
     flex-direction: row;
     justify-content: center;
     width: 100%;
     svg {
       align-self: center ;
+      text {
+        text-transform: uppercase;
+        text-align: right;
+        font-family: 'archia';
+        font-weight: 600;
+        fill: $gray;
+        font-size: 14px;
+      }
     }
   }
   .map-stats {
     flex: 0.1;
     position: absolute;
-    top: 1.25rem;
+    top: 4rem;
     left: 1px;
     h1, h5, h6 {
       margin: 0;
@@ -555,11 +599,6 @@ table {
       }
     }
   }
-  .states {
-    path {
-      transition: fill 0.1s ease-in-out;
-    }
-  }
 }
 
 .tabs {
@@ -579,6 +618,9 @@ table {
     text-align: center;
     margin-right: 0.25rem;
     transition: all 0.3s ease-in-out;
+    &:hover {
+      background: $gray-hover;
+    }
     &.focused {
       color: $gray;
       background: $gray-opaque;
@@ -602,7 +644,26 @@ table {
   width: 30rem;
   align-self: center;
   margin-top: 1rem;
+  .timeseries-mode {
+    position: absolute;
+    display: flex;
+    flex-direction: row;
+    top: 4.5rem;
+    right: 0;
+    z-index: 99;
+    input {margin: 0; cursor: pointer;}
+    label {
+      font-family: 'archia';
+      text-transform: uppercase;
+      font-size: 12px;
+      font-weight: 900;
+      margin-right: 0.5rem;
+      color: $gray;
+      z-index: 99;
+    }
+  }
 }
+
 
 .timeseries, .Minigraph {
   display: flex;
@@ -652,10 +713,12 @@ table {
   .svg-parent {
     position: relative;
     display: flex;
-    width: 100%;
+    width: 30rem;
+    align-self: center;
     background: $cherry-light;
     border-radius: 5px;
     margin-bottom: 1rem;
+    height: 10rem;
     svg {
       .domain, .tick, line {
         stroke: $cherry;
@@ -704,8 +767,14 @@ table {
   .svg-parent {
     width: 5rem;
     background: transparent !important;
+    height: 7rem;
   }
   margin-bottom: -3rem;
+  .tooltip {
+    position: fixed;
+    top: 0;
+    right: 0;
+  }
 }
 
 .Links {
@@ -816,8 +885,35 @@ footer {
   }
 }
 
+.FAQ {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 30rem;
+  & > * {
+    align-self: center;
+    width: 30rem;
+    margin-bottom: 1.5rem;
+  }
+  & > *:first-child {
+    margin-top: 2rem;
+  }
+  h2 {
+    margin: 0;
+    font-weight: 600;
+    text-transform: none;
+  }
+  .question {
+    margin-bottom: 0.5rem;
+    color: $gray-dark;
+  }
+  .answer {
+    color: $blue;
+  }
+}
+
 @media (max-width: 769px) {
-  .ChoroplethMap, .TimeSeries, table, .header, .Level, .timeseries-header, .TimeSeries-Parent, .Links, .Minigraph, .Summary, {
+  .ChoroplethMap, .TimeSeries, table, .header, .Level, .timeseries-header, .TimeSeries-Parent, .Links, .Minigraph, .Summary, .FAQ {
     width: calc(100% - 2rem);
   }
   .Home {
@@ -832,7 +928,7 @@ footer {
       flex-direction: column;
     }
   }
-  .link {
+  .link, .faq {
     width: calc(100% - 2rem);
   }
   .Navbar {
@@ -848,8 +944,10 @@ footer {
       cursor: pointer;
     }
   }
-  .ChoroplethMap {
-    height: calc(100% - 35rem);
+  .timeseries {
+    .svg-parent {
+      width: 100%;
+    }
   }
   .last-update {
     width: 10rem;
@@ -858,6 +956,28 @@ footer {
     width: 10rem;
     svg {
       width: 38px;
+    }
+  }
+  .Banner {
+    height: 7rem;
+    .snippet {
+      width: 100%;
+      margin-left: 1rem;
+      margin-right: 1rem;
+    }
+  }
+}
+
+/* For the iPhone X folks OMG WHY ARE YOUR SCREENS SO NARROW T_T*/ 
+@media (max-width: 375px) {
+  .timeseries-mode {
+    display: block !important;
+    width: 4.25rem;
+    top: 2rem !important;
+    text-align: right;
+    input {
+      margin: 0;
+      margin-top: 0.25rem !important;
     }
   }
 }
@@ -878,5 +998,22 @@ footer {
   100% {
     opacity: 1;
     transform: translateY(0px);
+  }
+}
+
+.iframe-container{
+  width: 100%;
+  min-height : 100vh;
+  iframe {
+    width: 100vw;
+    height: 100vh;
+    border: none;
+  }
+}
+
+#footerButtons {
+  display: flex;
+  > * + * {
+    margin-left: 8px;
   }
 }
