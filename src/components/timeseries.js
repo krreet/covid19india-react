@@ -1,10 +1,12 @@
-import React, {useState, useEffect, useRef, useCallback} from 'react';
-import * as d3 from 'd3';
-import moment from 'moment';
+import {testedToolTip} from './tooltips';
 
-import {sliceTimeseriesFromEnd} from '../utils/common-functions';
+import {sliceTimeseriesFromEnd, formatNumber} from '../utils/commonfunctions';
 import {useResizeObserver} from '../utils/hooks';
-import {formatNumber} from '../utils/common-functions';
+
+import * as d3 from 'd3';
+import {addDays, subDays, format} from 'date-fns';
+import React, {useState, useEffect, useRef, useCallback} from 'react';
+import * as Icon from 'react-feather';
 
 function TimeSeries(props) {
   const [lastDaysCount, setLastDaysCount] = useState(
@@ -12,7 +14,7 @@ function TimeSeries(props) {
   );
   const [timeseries, setTimeseries] = useState([]);
   const [datapoint, setDatapoint] = useState({});
-  const [index, setIndex] = useState(10);
+  const [index, setIndex] = useState(0);
   const [mode, setMode] = useState(props.mode);
   const [logMode, setLogMode] = useState(props.logMode);
   const [chartType, setChartType] = useState(props.type);
@@ -21,20 +23,29 @@ function TimeSeries(props) {
   const svgRef1 = useRef();
   const svgRef2 = useRef();
   const svgRef3 = useRef();
+  const svgRef4 = useRef();
+  const svgRef5 = useRef();
 
   const wrapperRef = useRef();
   const dimensions = useResizeObserver(wrapperRef);
 
+  const transformTimeSeries = useCallback(
+    (timeseries) => {
+      if (timeseries.length > 1) {
+        const slicedTimeseries = sliceTimeseriesFromEnd(
+          timeseries,
+          lastDaysCount
+        );
+        setIndex(slicedTimeseries.length - 1);
+        setTimeseries(slicedTimeseries);
+      }
+    },
+    [lastDaysCount]
+  );
+
   useEffect(() => {
-    if (props.timeseries.length > 1) {
-      const slicedTimeseries = sliceTimeseriesFromEnd(
-        props.timeseries,
-        lastDaysCount
-      );
-      setIndex(slicedTimeseries.length - 1);
-      setTimeseries(slicedTimeseries);
-    }
-  }, [props.timeseries, lastDaysCount]);
+    transformTimeSeries(props.timeseries);
+  }, [lastDaysCount, transformTimeSeries, props.timeseries]);
 
   useEffect(() => {
     setMode(props.mode);
@@ -49,7 +60,7 @@ function TimeSeries(props) {
   }, [props.type]);
 
   const graphData = useCallback(
-    (ts) => {
+    (timeseries) => {
       if (!dimensions) return;
       const width = dimensions.width;
       const height = dimensions.height;
@@ -59,20 +70,21 @@ function TimeSeries(props) {
       const chartRight = width - margin.right;
       const chartBottom = height - margin.bottom;
 
-      const T = ts.length;
-      const yBuffer = 1.1;
+      const T = timeseries.length;
+      const yBufferTop = 1.2;
+      const yBufferBottom = 1.1;
 
-      setDatapoint(ts[T - 1]);
+      setDatapoint(timeseries[T - 1]);
       setIndex(T - 1);
 
       const svg1 = d3.select(svgRef1.current);
       const svg2 = d3.select(svgRef2.current);
       const svg3 = d3.select(svgRef3.current);
+      const svg4 = d3.select(svgRef4.current);
+      const svg5 = d3.select(svgRef5.current);
 
-      const dateMin = new Date(ts[0]['date']);
-      dateMin.setDate(dateMin.getDate() - 1);
-      const dateMax = new Date(ts[T - 1]['date']);
-      dateMax.setDate(dateMax.getDate() + 1);
+      const dateMin = subDays(timeseries[0].date, 1);
+      const dateMax = addDays(timeseries[T - 1].date, 1);
 
       const xScale = d3
         .scaleTime()
@@ -84,49 +96,54 @@ function TimeSeries(props) {
       const numTicksX = width < 480 ? 4 : 7;
 
       const xAxis = (g) =>
-        g
-          .attr('class', 'x-axis')
-          .call(d3.axisBottom(xScale).ticks(numTicksX))
-          .style('transform', `translateY(${chartBottom}px)`);
+        g.attr('class', 'x-axis').call(d3.axisBottom(xScale).ticks(numTicksX));
+
+      const xAxis2 = (g, yScale) => {
+        g.attr('class', 'x-axis2')
+          .call(d3.axisBottom(xScale).tickValues([]).tickSize(0))
+          .select('.domain')
+          .style('transform', `translateY(${yScale(0)}px)`);
+
+        if (yScale(0) !== chartBottom) g.select('.domain').attr('opacity', 0.4);
+        else g.select('.domain').attr('opacity', 0);
+      };
 
       const yAxis = (g, yScale) =>
         g
           .attr('class', 'y-axis')
-          .call(d3.axisRight(yScale).ticks(4, '0~s').tickPadding(5))
-          .style('transform', `translateX(${chartRight}px)`);
+          .call(d3.axisRight(yScale).ticks(4, '0~s').tickPadding(5));
 
       // Arrays of objects
-      const svgArray = [svg1, svg2, svg3];
       const plotTotal = chartType === 1;
       const dataTypesTotal = [
         'totalconfirmed',
+        'totalactive',
         'totalrecovered',
         'totaldeceased',
+        'totaltested',
       ];
       const dataTypesDaily = [
         'dailyconfirmed',
+        'dailyactive',
         'dailyrecovered',
         'dailydeceased',
       ];
 
-      const colors = ['#ff073a', '#28a745', '#6c757d'];
+      const colors = ['#ff073a', '#007bff', '#28a745', '#6c757d', '#201aa2'];
+
+      const svgArray = [svg1, svg2, svg3, svg4];
+      if (plotTotal) svgArray.push(svg5);
 
       let yScales;
       if (plotTotal) {
-        let uniformScaleMin = Infinity;
-        dataTypesTotal.forEach((type) => {
-          uniformScaleMin = Math.min(
-            uniformScaleMin,
-            d3.min(ts, (d) => d[type])
-          );
-        });
+        const uniformScaleMin = d3.min(timeseries, (d) =>
+          Math.min(d.totalactive, d.totalrecovered, d.totaldeceased)
+        );
+        const uniformScaleMax = d3.max(timeseries, (d) => d.totalconfirmed);
         const yScaleUniformLinear = d3
           .scaleLinear()
           .clamp(true)
-          .domain([
-            uniformScaleMin,
-            Math.max(1, yBuffer * d3.max(ts, (d) => d.totalconfirmed)),
-          ])
+          .domain([uniformScaleMin, Math.max(1, yBufferTop * uniformScaleMax)])
           .nice()
           .range([chartBottom, margin.top]);
 
@@ -135,7 +152,7 @@ function TimeSeries(props) {
           .clamp(true)
           .domain([
             Math.max(1, uniformScaleMin),
-            Math.max(1, yBuffer * d3.max(ts, (d) => d.totalconfirmed)),
+            Math.max(10, yBufferTop * uniformScaleMax),
           ])
           .nice()
           .range([chartBottom, margin.top]);
@@ -145,8 +162,8 @@ function TimeSeries(props) {
             .scaleLinear()
             .clamp(true)
             .domain([
-              d3.min(ts, (d) => d[type]),
-              Math.max(1, yBuffer * d3.max(ts, (d) => d[type])),
+              d3.min(timeseries, (d) => d[type]),
+              Math.max(1, yBufferTop * d3.max(timeseries, (d) => d[type])),
             ])
             .nice()
             .range([chartBottom, margin.top]);
@@ -156,34 +173,53 @@ function TimeSeries(props) {
             .domain([
               Math.max(
                 1,
-                d3.min(ts, (d) => d[type])
+                d3.min(timeseries, (d) => d[type])
               ),
-              Math.max(1, yBuffer * d3.max(ts, (d) => d[type])),
+              Math.max(10, yBufferTop * d3.max(timeseries, (d) => d[type])),
             ])
             .nice()
             .range([chartBottom, margin.top]);
-          if (logMode) return mode ? yScaleUniformLog : yScaleLog;
-          else return mode ? yScaleUniformLinear : yScaleLinear;
+          if (mode && type !== 'totaltested')
+            return logMode ? yScaleUniformLog : yScaleUniformLinear;
+          else return logMode ? yScaleLog : yScaleLinear;
         });
       } else {
         const yScaleDailyUniform = d3
           .scaleLinear()
           .clamp(true)
           .domain([
-            0,
-            Math.max(1, yBuffer * d3.max(ts, (d) => d.dailyconfirmed)),
+            yBufferBottom *
+              Math.min(
+                0,
+                d3.min(timeseries, (d) => d.dailyactive)
+              ),
+            Math.max(
+              1,
+              yBufferTop *
+                d3.max(timeseries, (d) =>
+                  Math.max(d.dailyconfirmed, d.dailyrecovered, d.dailydeceased)
+                )
+            ),
           ])
           .nice()
           .range([chartBottom, margin.top]);
 
         yScales = dataTypesDaily.map((type) => {
+          if (mode) return yScaleDailyUniform;
           const yScaleLinear = d3
             .scaleLinear()
             .clamp(true)
-            .domain([0, Math.max(1, yBuffer * d3.max(ts, (d) => d[type]))])
+            .domain([
+              yBufferBottom *
+                Math.min(
+                  0,
+                  d3.min(timeseries, (d) => d[type])
+                ),
+              Math.max(1, yBufferTop * d3.max(timeseries, (d) => d[type])),
+            ])
             .nice()
             .range([chartBottom, margin.top]);
-          return mode ? yScaleDailyUniform : yScaleLinear;
+          return yScaleLinear;
         });
       }
 
@@ -191,8 +227,10 @@ function TimeSeries(props) {
       const focus = svgArray.map((svg, i) => {
         return svg
           .selectAll('.focus')
-          .data([ts[T - 1]], (d) => d.date)
-          .join('circle')
+          .data([timeseries[T - 1]], (d) => d.date)
+          .join((enter) =>
+            enter.append('circle').attr('cx', (d) => xScale(d.date))
+          )
           .attr('class', 'focus')
           .attr('fill', colors[i])
           .attr('stroke', colors[i])
@@ -203,32 +241,37 @@ function TimeSeries(props) {
         const xm = d3.mouse(this)[0];
         const date = xScale.invert(xm);
         const bisectDate = d3.bisector((d) => d.date).left;
-        let i = bisectDate(ts, date, 1);
+        let i = bisectDate(timeseries, date, 1);
         if (0 <= i && i < T) {
-          if (date - ts[i - 1].date < ts[i].date - date) --i;
-          setDatapoint(ts[i]);
+          if (date - timeseries[i - 1].date < timeseries[i].date - date) --i;
+          setDatapoint(timeseries[i]);
           setIndex(i);
           setMoving(true);
-          const d = ts[i];
+          const d = timeseries[i];
           focus.forEach((f, j) => {
             const yScale = yScales[j];
             const type = plotTotal ? dataTypesTotal[j] : dataTypesDaily[j];
-            f.attr('cx', xScale(d.date)).attr('cy', yScale(d[type]));
+            if (!isNaN(d[type]))
+              f.attr('cx', xScale(d.date))
+                .attr('cy', yScale(d[type]))
+                .attr('opacity', 1);
+            else f.attr('opacity', 0);
           });
         }
       }
 
       function mouseout() {
-        setDatapoint(ts[T - 1]);
+        setDatapoint(timeseries[T - 1]);
         setIndex(T - 1);
         setMoving(false);
         focus.forEach((f, j) => {
           const yScale = yScales[j];
           const type = plotTotal ? dataTypesTotal[j] : dataTypesDaily[j];
-          f.attr('cx', xScale(ts[T - 1].date)).attr(
-            'cy',
-            yScale(ts[T - 1][type])
-          );
+          if (!isNaN(timeseries[T - 1][type]))
+            f.attr('cx', xScale(timeseries[T - 1].date))
+              .attr('cy', yScale(timeseries[T - 1][type]))
+              .attr('opacity', 1);
+          else f.attr('opacity', 0);
         });
       }
 
@@ -240,29 +283,34 @@ function TimeSeries(props) {
         const typeDaily = dataTypesDaily[i];
         const type = plotTotal ? typeTotal : typeDaily;
 
+        const filteredTimeseries = timeseries.filter((d) => !isNaN(d[type]));
         const color = colors[i];
         const yScale = yScales[i];
-        // WARNING: Bad code ahead.
+
         /* X axis */
-        if (svg.select('.x-axis').empty()) {
-          svg.append('g').attr('class', 'x-axis').call(xAxis);
-        } else {
-          svg.select('.x-axis').transition(t).call(xAxis);
-        }
+        svg
+          .select('.x-axis')
+          .style('transform', `translateY(${chartBottom}px)`)
+          .transition(t)
+          .call(xAxis);
+        svg.select('.x-axis2').transition(t).call(xAxis2, yScale);
         /* Y axis */
-        if (svg.select('.y-axis').empty()) {
-          svg.append('g').call(yAxis, yScale);
-        } else {
-          svg.select('.y-axis').transition(t).call(yAxis, yScale);
-        }
-        // ^This block of code should be written in a more d3 way following the
-        //  General Update Pattern. Can't find of a way to do that within React.
+        svg
+          .select('.y-axis')
+          .style('transform', `translateX(${chartRight}px)`)
+          .transition(t)
+          .call(yAxis, yScale);
 
         /* Path dots */
         svg
           .selectAll('.dot')
-          .data(ts, (d) => d.date)
-          .join((enter) => enter.append('circle').attr('cy', chartBottom))
+          .data(filteredTimeseries, (d) => d.date)
+          .join((enter) =>
+            enter
+              .append('circle')
+              .attr('cx', (d) => xScale(d.date))
+              .attr('cy', chartBottom)
+          )
           .attr('class', 'dot')
           .attr('fill', color)
           .attr('stroke', color)
@@ -271,17 +319,20 @@ function TimeSeries(props) {
           .attr('cx', (d) => xScale(d.date))
           .attr('cy', (d) => yScale(d[type]));
 
-        focus[i]
-          .transition(t)
-          .attr('cx', (d) => xScale(d.date))
-          .attr('cy', (d) => yScale(d[type]));
+        if (!isNaN(timeseries[T - 1][type]))
+          focus[i]
+            .transition(t)
+            .attr('cx', (d) => xScale(d.date))
+            .attr('cy', (d) => yScale(d[type]))
+            .attr('opacity', 1);
+        else focus[i].transition(t).attr('opacity', 0);
 
         if (plotTotal) {
           /* TOTAL TRENDS */
           svg.selectAll('.stem').remove();
           const path = svg
             .selectAll('.trend')
-            .data([[...ts].reverse()])
+            .data([[...filteredTimeseries].reverse()])
             .join('path')
             .attr('class', 'trend')
             .attr('fill', 'none')
@@ -323,19 +374,20 @@ function TimeSeries(props) {
           svg.selectAll('.trend').remove();
           svg
             .selectAll('.stem')
-            .data(ts, (d) => d.date)
+            .data(timeseries, (d) => d.date)
             .join((enter) =>
               enter
                 .append('line')
                 .attr('x1', (d) => xScale(d.date))
                 .attr('x2', (d) => xScale(d.date))
+                .attr('y1', chartBottom)
                 .attr('y2', chartBottom)
             )
             .attr('class', 'stem')
             .style('stroke', color + '99')
             .style('stroke-width', 4)
-            .attr('y1', chartBottom)
             .transition(t)
+            .attr('y1', yScale(0))
             .attr('x1', (d) => xScale(d.date))
             .attr('x2', (d) => xScale(d.date))
             .attr('y2', (d) => yScale(d[typeDaily]));
@@ -357,19 +409,17 @@ function TimeSeries(props) {
     }
   }, [timeseries, graphData]);
 
-  const focusDate = moment(datapoint.date);
-  let dateStr = focusDate.format('DD MMMM');
-  dateStr += focusDate.isSame(moment().subtract(1, 'days'), 'day')
-    ? ' Yesterday'
-    : '';
+  const dateStr = datapoint.date ? format(datapoint.date, 'dd MMMM') : '';
 
   const chartKey1 = chartType === 1 ? 'totalconfirmed' : 'dailyconfirmed';
-  const chartKey2 = chartType === 1 ? 'totalrecovered' : 'dailyrecovered';
-  const chartKey3 = chartType === 1 ? 'totaldeceased' : 'dailydeceased';
+  const chartKey2 = chartType === 1 ? 'totalactive' : 'dailyactive';
+  const chartKey3 = chartType === 1 ? 'totalrecovered' : 'dailyrecovered';
+  const chartKey4 = chartType === 1 ? 'totaldeceased' : 'dailydeceased';
 
   // Function for calculate increased/decreased count for each type of data
   const currentStatusCount = (chartType) => {
-    if (timeseries.length <= 0 || index === 0) return '';
+    if (timeseries.length <= 0 || index <= 0 || index >= timeseries.length)
+      return '';
     const currentDiff =
       timeseries[index][chartType] - timeseries[index - 1][chartType];
     const formatedDiff = formatNumber(currentDiff);
@@ -377,11 +427,8 @@ function TimeSeries(props) {
   };
 
   return (
-    <div
-      className="TimeSeries-Parent fadeInUp"
-      style={{animationDelay: '2.7s'}}
-    >
-      <div className="timeseries">
+    <React.Fragment>
+      <div className="TimeSeries fadeInUp" style={{animationDelay: '2.7s'}}>
         <div className="svg-parent" ref={wrapperRef}>
           <div className="stats">
             <h5 className={`${!moving ? 'title' : ''}`}>Confirmed</h5>
@@ -391,7 +438,27 @@ function TimeSeries(props) {
               <h6>{currentStatusCount(chartKey1)}</h6>
             </div>
           </div>
-          <svg ref={svgRef1} preserveAspectRatio="xMidYMid meet" />
+          <svg ref={svgRef1} preserveAspectRatio="xMidYMid meet">
+            <g className="x-axis" />
+            <g className="x-axis2" />
+            <g className="y-axis" />
+          </svg>
+        </div>
+
+        <div className="svg-parent is-blue">
+          <div className="stats is-blue">
+            <h5 className={`${!moving ? 'title' : ''}`}>Active</h5>
+            <h5 className={`${moving ? 'title' : ''}`}>{`${dateStr}`}</h5>
+            <div className="stats-bottom">
+              <h2>{formatNumber(datapoint[chartKey2])}</h2>
+              <h6>{currentStatusCount(chartKey2)}</h6>
+            </div>
+          </div>
+          <svg ref={svgRef2} preserveAspectRatio="xMidYMid meet">
+            <g className="x-axis" />
+            <g className="x-axis2" />
+            <g className="y-axis" />
+          </svg>
         </div>
 
         <div className="svg-parent is-green">
@@ -399,11 +466,15 @@ function TimeSeries(props) {
             <h5 className={`${!moving ? 'title' : ''}`}>Recovered</h5>
             <h5 className={`${moving ? 'title' : ''}`}>{`${dateStr}`}</h5>
             <div className="stats-bottom">
-              <h2>{formatNumber(datapoint[chartKey2])}</h2>
-              <h6>{currentStatusCount(chartKey2)}</h6>
+              <h2>{formatNumber(datapoint[chartKey3])}</h2>
+              <h6>{currentStatusCount(chartKey3)}</h6>
             </div>
           </div>
-          <svg ref={svgRef2} preserveAspectRatio="xMidYMid meet" />
+          <svg ref={svgRef3} preserveAspectRatio="xMidYMid meet">
+            <g className="x-axis" />
+            <g className="x-axis2" />
+            <g className="y-axis" />
+          </svg>
         </div>
 
         <div className="svg-parent is-gray">
@@ -411,12 +482,34 @@ function TimeSeries(props) {
             <h5 className={`${!moving ? 'title' : ''}`}>Deceased</h5>
             <h5 className={`${moving ? 'title' : ''}`}>{`${dateStr}`}</h5>
             <div className="stats-bottom">
-              <h2>{formatNumber(datapoint[chartKey3])}</h2>
-              <h6>{currentStatusCount(chartKey3)}</h6>
+              <h2>{formatNumber(datapoint[chartKey4])}</h2>
+              <h6>{currentStatusCount(chartKey4)}</h6>
             </div>
           </div>
-          <svg ref={svgRef3} preserveAspectRatio="xMidYMid meet" />
+          <svg ref={svgRef4} preserveAspectRatio="xMidYMid meet">
+            <g className="x-axis" />
+            <g className="x-axis2" />
+            <g className="y-axis" />
+          </svg>
         </div>
+
+        {chartType === 1 && (
+          <div className="svg-parent is-purple">
+            <div className="stats is-purple">
+              <h5 className={`${!moving ? 'title' : ''}`}>
+                Tested {props.isTotal ? testedToolTip : ''}
+              </h5>
+              <h5 className={`${moving ? 'title' : ''}`}>{`${dateStr}`}</h5>
+              <div className="stats-bottom">
+                <h2>{formatNumber(datapoint.totaltested)}</h2>
+              </div>
+            </div>
+            <svg ref={svgRef5} preserveAspectRatio="xMidYMid meet">
+              <g className="x-axis" />
+              <g className="y-axis" />
+            </svg>
+          </div>
+        )}
       </div>
 
       <div className="pills">
@@ -425,7 +518,7 @@ function TimeSeries(props) {
           onClick={() => setLastDaysCount(Infinity)}
           className={lastDaysCount === Infinity ? 'selected' : ''}
         >
-          All
+          Beginning
         </button>
         <button
           type="button"
@@ -433,7 +526,7 @@ function TimeSeries(props) {
           className={lastDaysCount === 30 ? 'selected' : ''}
           aria-label="1 month"
         >
-          1M
+          1 Month
         </button>
         <button
           type="button"
@@ -441,11 +534,18 @@ function TimeSeries(props) {
           className={lastDaysCount === 14 ? 'selected' : ''}
           aria-label="14 days"
         >
-          14D
+          2 Weeks
         </button>
       </div>
-    </div>
+
+      <div className="alert">
+        <Icon.AlertOctagon />
+        <div className="alert-right">
+          Tested chart is independent of uniform scaling
+        </div>
+      </div>
+    </React.Fragment>
   );
 }
 
-export default TimeSeries;
+export default React.memo(TimeSeries);
